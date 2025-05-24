@@ -1,72 +1,45 @@
+// server.js
+require('dotenv').config();
 const express = require('express');
-const mongoose = require('mongoose');
 const cors = require('cors');
-const Product = require('./models/Product');
-const multer = require('multer');
+const helmet = require('helmet');
+const morgan = require('morgan');
 const path = require('path');
 
+const connectDB = require('./config/db');
+const productRoutes = require('./routes/productRoutes');
+const customerRoutes = require('./routes/customerRoutes'); // New
+const debtRoutes = require('./routes/debtRoutes');     // New
+const errorHandler = require('./middleware/errorHandler');
+
+connectDB();
 const app = express();
+
 app.use(cors());
+app.use(helmet());
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
-const storage = multer.diskStorage({
-    destination: function (req, file, cb) {
-        cb(null, 'uploads/');
-    },
-    filename: function (req, file, cb) {
-        cb(null, Date.now() + path.extname(file.originalname));
-    }
+if (process.env.NODE_ENV === 'development') {
+    app.use(morgan('dev'));
+} else {
+    app.use(morgan('short'));
+}
+
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
+app.get('/', (req, res) => {
+    res.send('Warunku API is running...');
 });
 
-const upload = multer({ storage });
+// API Routes
+app.use('/api/products', productRoutes);
+app.use('/api/customers', customerRoutes); // Add customer routes
+app.use('/api/debts', debtRoutes);         // Add debt routes
 
+app.use(errorHandler);
 
-
-mongoose.connect(process.env.MONGO_URL || 'mongodb://localhost:27017/inventory', {
-    useNewUrlParser: true,
-    useUnifiedTopology: true,
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+    console.log(`Server running in ${process.env.NODE_ENV} mode on port ${PORT}`);
 });
-
-// Routes
-app.get('/products', async (req, res) => {
-    const products = await Product.find();
-    res.json(products);
-});
-
-app.post('/products', async (req, res) => {
-    const product = new Product(req.body);
-    await product.save();
-    res.json(product);
-});
-
-app.put('/products/:id', async (req, res) => {
-    const updated = await Product.findByIdAndUpdate(req.params.id, req.body, { new: true });
-    res.json(updated);
-});
-
-app.delete('/products/:id', async (req, res) => {
-    await Product.findByIdAndDelete(req.params.id);
-    res.json({ message: 'Deleted' });
-});
-
-app.get('/products', async (req, res) => {
-    const search = req.query.search || '';
-    const products = await Product.find({
-        $or: [
-            { name: { $regex: search, $options: 'i' } },
-            { description: { $regex: search, $options: 'i' } }
-        ]
-    });
-    res.json(products);
-});
-
-app.use('/uploads', express.static('uploads'));
-
-app.post('/upload', upload.single('image'), (req, res) => {
-    res.json({ imagePath: `/uploads/${req.file.filename}` });
-});
-
-
-
-app.listen(3000, () => console.log('Server running on http://localhost:3000'));
-
