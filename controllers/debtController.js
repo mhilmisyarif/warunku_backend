@@ -210,36 +210,35 @@ exports.updateDebtRecord = asyncHandler(async (req, res) => {
         throw new Error('Debt record not found');
     }
 
-    const { amountPaid, status, notes, dueDate } = req.body;
+    const { newPayment, notes, dueDate } = req.body; // newPayment would be an object like { amount: 100, method: 'Cash', paymentDate: '...', notes: '...' }
 
-    // Update fields if provided
-    if (amountPaid !== undefined) {
-        // Ensure amountPaid is a number and not negative
-        const payment = parseFloat(amountPaid);
-        if (isNaN(payment) || payment < 0) {
-            res.status(400); throw new Error('Invalid amount paid value.');
+    if (newPayment && newPayment.amount > 0) {
+        // Basic validation for newPayment object
+        if (typeof newPayment.amount !== 'number' || newPayment.amount <= 0) {
+            res.status(400); throw new Error('Invalid payment amount.');
         }
-        // Here you might want to add to existing amountPaid or set it.
-        // For simplicity, let's assume this sets the new total amountPaid.
-        // Or, if it's a new payment, debtRecord.amountPaid += payment;
-        debtRecord.amountPaid = payment;
+        const paymentDate = newPayment.paymentDate ? new Date(newPayment.paymentDate) : new Date();
+        if (isNaN(paymentDate)) {
+            res.status(400); throw new Error('Invalid payment date.');
+        }
+
+        debtRecord.paymentHistory.push({
+            amount: newPayment.amount,
+            paymentDate: paymentDate,
+            method: newPayment.method, // Optional
+            notes: newPayment.notes    // Optional
+        });
     }
 
-    if (status) { // Allow explicit status update
-        debtRecord.status = status.toUpperCase();
-    }
+    // Update other fields if provided
     if (notes !== undefined) {
         debtRecord.notes = notes;
     }
     if (dueDate !== undefined) {
         debtRecord.dueDate = dueDate;
     }
-
-
-    // Pre-save hook will update status based on new amountPaid and totalAmount.
-    // It also re-calculates totalAmount (though for updates, items are usually not changed here)
-    // If items can be changed on update, ensure totalAmount is re-calculated based on new items.
-    // For this example, we assume items are not modified by this specific update endpoint.
+    // Do NOT directly set debtRecord.amountPaid or debtRecord.status here.
+    // Let the pre-save hook handle it.
 
     const updatedDebtRecord = await debtRecord.save();
     res.json(updatedDebtRecord);
